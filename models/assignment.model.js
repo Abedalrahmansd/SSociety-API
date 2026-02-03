@@ -35,6 +35,11 @@ const Assignment = sequelize.define('Assignment', {
 }, {
   tableName: 'assignments',
   timestamps: false,
+  indexes: [
+    { fields: ['grade_id', 'start_date'] },
+    { fields: ['created_by'] },
+    { fields: ['is_verified'] },
+  ],
 });
 
 export default Assignment;

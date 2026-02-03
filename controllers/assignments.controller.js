@@ -1,5 +1,7 @@
 import Assignment from '../models/assignment.model.js';
 import User from '../models/user.model.js';
+import Grade from '../models/grade.model.js';
+import { getIO } from '../utils/socket.io.js';
 
 // Create assignment (students and admins) – auto-verify if admin
 export const createAssignment = async (req, res) => {
@@ -35,6 +37,18 @@ export const createAssignment = async (req, res) => {
       grade_id,
       is_verified,
     });
+
+    // Emit real-time event to grade's chat room
+    try {
+      const grade = await Grade.findByPk(grade_id);
+      if (grade?.chat_group_id) {
+        const io = getIO();
+        io.to(grade.chat_group_id).emit('new_assignment', assignment.toJSON());
+      }
+    } catch (socketError) {
+      console.error('Failed to emit assignment event:', socketError);
+      // Don't fail the request if socket emit fails
+    }
 
     return res.status(201).json({
       status: 'success',
@@ -100,6 +114,18 @@ export const verifyAssignment = async (req, res) => {
     }
 
     await assignment.update({ is_verified: 1 });
+    await assignment.reload();
+
+    // Emit real-time event
+    try {
+      const grade = await Grade.findByPk(assignment.grade_id);
+      if (grade?.chat_group_id) {
+        const io = getIO();
+        io.to(grade.chat_group_id).emit('assignment_updated', assignment.toJSON());
+      }
+    } catch (socketError) {
+      console.error('Failed to emit assignment update event:', socketError);
+    }
 
     return res.status(200).json({
       status: 'success',
@@ -126,9 +152,30 @@ export const deleteAssignments = async (req, res) => {
       });
     }
 
+    // Get assignments before deletion to emit events
+    const assignmentsToDelete = await Assignment.findAll({
+      where: { id: ids },
+      include: [{ model: Grade, as: 'grade', attributes: ['chat_group_id'] }],
+    });
+
     const deletedCount = await Assignment.destroy({
       where: { id: ids },
     });
+
+    // Emit real-time events for deleted assignments
+    try {
+      const io = getIO();
+      assignmentsToDelete.forEach((assignment) => {
+        if (assignment.grade?.chat_group_id) {
+          io.to(assignment.grade.chat_group_id).emit('assignment_deleted', {
+            id: assignment.id,
+            grade_id: assignment.grade_id,
+          });
+        }
+      });
+    } catch (socketError) {
+      console.error('Failed to emit assignment delete events:', socketError);
+    }
 
     return res.status(200).json({
       status: 'success',

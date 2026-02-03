@@ -50,6 +50,11 @@ const Message = sequelize.define('Message', {
 }, {
   tableName: 'messages',
   timestamps: false,
+  indexes: [
+    { fields: ['chat_group_id', 'sentAt'] },
+    { fields: ['sender'] },
+    { fields: ['isDeleted'] },
+  ],
 });
 
 export default Message;

@@ -42,6 +42,11 @@ const File = sequelize.define('File', {
 }, {
   tableName: 'files',
   timestamps: false,
+  indexes: [
+    { fields: ['grade_id', 'category'] },
+    { fields: ['user_id'] },
+    { fields: ['uploaded_at'] },
+  ],
 });
 
 export default File;

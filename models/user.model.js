@@ -150,6 +150,12 @@ const User = sequelize.define('User', {
 }, {
     tableName: 'users',
     timestamps: false,
+    indexes: [
+        { fields: ['email'], unique: true },
+        { fields: ['grade_id'] },
+        { fields: ['is_verified'] },
+        { fields: ['is_admin', 'is_manager'] },
+    ],
 });
 
 export default User;

@@ -13,6 +13,10 @@ import { connectDB } from './database/mysqldb.js';
 import cookieParser from 'cookie-parser';
 import Grade from './models/grade.model.js';
 import Message from './models/message.model.js';
+import { setIO } from './utils/socket.io.js';
+
+// Import associations after all models are loaded
+import './models/associations.js';
 
 //Routes
 import authRouter from './routes/auth.routes.js';
@@ -83,6 +87,9 @@ const io = new Server(server, {
   },
 });
 
+// Export io instance for use in controllers
+setIO(io);
+
 //main Route
 app.get('/', (req, res) => {
   res.sendFile(join(__dirname, 'view', 'index.html')); // Serve the HTML file
@@ -108,6 +115,9 @@ io.use((socket, next) => {
   }
 });
 
+// Track online users per room
+const onlineUsers = new Map(); // roomId -> Set of userIds
+
 io.on('connection', async (socket) => {
   console.log('User connected to socket:', socket.id, 'userId:', socket.user?.id);
 
@@ -115,6 +125,25 @@ io.on('connection', async (socket) => {
   socket.on('join_room', async (chatGroupId) => {
     if (!chatGroupId) return;
     socket.join(chatGroupId);
+    
+    // Track presence
+    if (!onlineUsers.has(chatGroupId)) {
+      onlineUsers.set(chatGroupId, new Set());
+    }
+    onlineUsers.get(chatGroupId).add(socket.user.id);
+    
+    // Notify others in room
+    socket.to(chatGroupId).emit('user_online', {
+      chat_group_id: chatGroupId,
+      user_id: socket.user.id,
+    });
+    
+    // Send current online users to the new joiner
+    const online = Array.from(onlineUsers.get(chatGroupId));
+    socket.emit('online_users', {
+      chat_group_id: chatGroupId,
+      user_ids: online,
+    });
   });
 
   // Typing indicators
@@ -304,6 +333,20 @@ io.on('connection', async (socket) => {
 
   socket.on('disconnect', () => {
     console.log('User disconnected from socket:', socket.id);
+    
+    // Remove from presence tracking and notify
+    onlineUsers.forEach((userSet, roomId) => {
+      if (userSet.has(socket.user.id)) {
+        userSet.delete(socket.user.id);
+        socket.to(roomId).emit('user_offline', {
+          chat_group_id: roomId,
+          user_id: socket.user.id,
+        });
+        if (userSet.size === 0) {
+          onlineUsers.delete(roomId);
+        }
+      }
+    });
   });
 });
 
@@ -329,3 +372,4 @@ server.listen(PORT, async () => {
   console.log(`Server is running on http://localhost:${PORT}`);
   await connectDB(); // Connect to the database when the server starts
 });
+

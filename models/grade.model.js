@@ -19,6 +19,9 @@ const Grade = sequelize.define('Grade', {
 }, {
   tableName: 'grades',
   timestamps: false,
+  indexes: [
+    { fields: ['chat_group_id'], unique: true },
+  ],
 });
 
 export default Grade;
